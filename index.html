@@ -1,1 +1,99 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0420">
 
+<!-- ===== JUDUL & GAMBAR SHARE (yang muncul saat link dibagikan ke Facebook) ===== -->
+<title>Dramaku - Nonton Drama Pendek</title>
+<meta name="description" content="Tonton episode drama terbaru setiap hari.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Dramaku - Nonton Drama Pendek">
+<meta property="og:description" content="Tonton episode drama terbaru setiap hari.">
+<meta property="og:image" content="https://ISI-LINK-GAMBAR-SHARE.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://ISI-LINK-GAMBAR-SHARE.jpg">
+<!-- ===== AKHIR JUDUL & GAMBAR SHARE ===== -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@800&family=Plus+Jakarta+Sans:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script>(function(s){s.dataset.zone='11563270',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
+</head>
+<body>
+<div class="hal">
+
+  <header class="atas">
+    <a id="linkLogo" class="logo" href="#">
+      <span class="logo-ikon pelangi"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></span>
+      <span class="logo-teks"><b>D</b><b>r</b><b>a</b><b>m</b><b>a</b><b>k</b><b>u</b></span>
+    </a>
+    <div class="ticker" aria-hidden="true">
+      <div class="ticker-isi">
+        <span class="w3">Episode baru setiap hari</span><span class="w1">Gratis nonton</span>
+        <span class="w4">Episode baru setiap hari</span><span class="w2">Gratis nonton</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="bingkai" id="bingkai">
+    <div class="cincin"></div>
+    <div class="layar">
+      <video id="video" playsinline preload="none"></video>
+
+      <div class="atas-video">
+        <span class="label pelangi" id="label">TRENDING #1</span>
+        <span class="durasi">
+          <span class="eq"><i></i><i></i><i></i></span>
+          <span id="durasi">02:15</span>
+        </span>
+      </div>
+
+      <button class="tombol-play denyut" id="tombolPlay" aria-label="Putar video">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+
+      <button class="suara" id="tombolSuara" hidden>Ketuk untuk suara</button>
+
+      <div class="aksi-samping">
+        <button class="bulat melayang" id="tombolSuka" aria-label="Suka">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7-4.5-9.5-9A5.5 5.5 0 0 1 12 6a5.5 5.5 0 0 1 9.5 6C19 16.5 12 21 12 21z"/></svg>
+        </button>
+        <button class="bulat" id="tombolBagikan" aria-label="Bagikan">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l7 7-7 7"/><path d="M21 12H9a6 6 0 0 0-6 6"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+    <div class="info">
+    <h1 id="judul">Judul Drama</h1>
+    <p id="deskripsi">Deskripsi singkat episode</p>
+  </div>
+
+  <div class="episode" id="daftarEpisode">
+    <button class="ep" data-ep="0"><i></i>Episode 1</button>
+    <button class="ep" data-ep="1"><i></i>Episode 2</button>
+    <button class="ep" data-ep="2"><i></i>Episode 3</button>
+  </div>
+
+  <div class="tombol-bawah">
+    <a id="linkAplikasi" class="btn btn-app pelangi" href="#">
+      <span class="kilau"></span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M12 7v7"/><path d="M9 11l3 3 3-3"/></svg>
+      <span>Download Aplikasi Drama</span>
+    </a>
+    <a id="linkTelegram" class="btn btn-tg" href="#">
+      <span class="kilau"></span>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4L3 11l6 2 2 6 3-4 5 4z"/><path d="M9 13l12-9"/></svg>
+      <span>Gabung Saluran Telegram</span>
+    </a>
+  </div>
+
+</div>
+<script src="script.js"></script>
+</body>
+</html>
