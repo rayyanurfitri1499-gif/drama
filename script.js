@@ -102,6 +102,13 @@ const PENGATURAN = {
       layar.style.backgroundImage = "";
       layar.classList.remove("ada-poster");
       video.removeAttribute("poster");
+      // tanpa poster: tampilkan gambar awal dari video
+      video.muted = true;
+      video.preload = "metadata";
+      video.src = d.video + "#t=0.1";
+      video.style.display = "block";
+      video.style.opacity = "1";
+      video.style.visibility = "visible";
     }
     tombolEp.forEach((b, k) => b.classList.toggle("aktif", k === i));
   }
