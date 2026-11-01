@@ -40,7 +40,8 @@ const PENGATURAN = {
     }
   ]
 };
-    (function () {
+
+(function () {
   const P = PENGATURAN;
   const $ = (id) => document.getElementById(id);
   const layar = document.querySelector(".layar");
@@ -71,7 +72,6 @@ const PENGATURAN = {
     }
   }
 
-  
   function pasangLink(id, url) {
     const el = $(id);
     el.href = link(url);
@@ -80,7 +80,7 @@ const PENGATURAN = {
   pasangLink("linkLogo", P.logo);
   pasangLink("linkAplikasi", P.aplikasi);
   pasangLink("linkTelegram", P.telegram);
-      
+
   const awal = bacaHash();
   let ep = (awal && P.episode[awal.ep]) ? awal.ep : 0;
 
@@ -113,7 +113,7 @@ const PENGATURAN = {
       buka(link(P.episode[k].smartlink));
     });
   });
-    
+
   function hentikanVideo() {
     video.pause();
     video.removeAttribute("src");
@@ -130,7 +130,6 @@ const PENGATURAN = {
     video.controls = true;
     video.muted = false;
     video.play().catch(() => {
-
       video.muted = true;
       tombolSuara.hidden = false;
       video.play().catch(() => {
@@ -145,6 +144,7 @@ const PENGATURAN = {
     tombolSuara.hidden = true;
     video.play().catch(() => {});
   });
+
   tombolPlay.addEventListener("click", () => {
     const sudah = klik[ep] || 0;
     const target = Math.max(0, Number(P.jumlahKlikPlay) || 0);
@@ -157,6 +157,7 @@ const PENGATURAN = {
     }
     putarVideo();
   });
+
   function cekKembali() {
     const h = bacaHash();
     if (h && h.jenis === "putar" && h.ep === ep) {
@@ -168,12 +169,14 @@ const PENGATURAN = {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") cekKembali();
   });
+
   $("tombolSuka").addEventListener("click", (e) => e.currentTarget.classList.toggle("aktif"));
   $("tombolBagikan").addEventListener("click", () => {
     const data = { title: document.title, url: location.href };
     if (navigator.share) navigator.share(data).catch(() => {});
     else if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(() => alert("Link disalin"));
   });
+
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver((list) => {
       list.forEach((x) => x.target.classList.toggle("diam", !x.isIntersecting));
