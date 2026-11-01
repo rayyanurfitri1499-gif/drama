@@ -38,6 +38,8 @@ const PENGATURAN = {
       poster: "",
       smartlink: "https://asiaso.org/4/5b2ebc879d26c5fdc3cfc191cfe9aaba"
     }
+  ]
+};
     (function () {
   const P = PENGATURAN;
   const $ = (id) => document.getElementById(id);
