@@ -101,7 +101,7 @@ async function api(method, path, body) {
   return data;
 }
 
-/* =========================================================
+   /* =========================================================
    BAGIAN 4: MODE DEMO (data contoh, dipakai kalau API_BASE kosong)
    ========================================================= */
 const DEMO_COUNTRIES = [
@@ -213,7 +213,7 @@ async function demoApi(method, path, body) {
   throw new Error('Alamat tidak dikenal: ' + p);
 }
 
-/* =========================================================
+   /* =========================================================
    BAGIAN 5: STATUS & PINDAH HALAMAN
    ========================================================= */
 const state = {
@@ -395,4 +395,450 @@ function screenRegister() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email)) return toast('Email tidak valid');
     if (data.password.length < 8) return toast('Kata sandi minimal 8 karakter');
     if (data.password !== fd.get('password2')) return toast('Konfirmasi kata sandi tidak sama');
-    if (CONFI
+    if (CONFIG.TURNSTILE_SITEKEY && !turnstileToken) return toast('Selesaikan cek keamanan dulu');
+    if (!fd.get('agree')) return toast('Centang persetujuan Syarat & Ketentuan');
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await api('POST', '/auth/register', data);
+      go('#/verifikasi?email=' + encodeURIComponent(data.email));
+    } catch (err) { toast(err.message); btn.disabled = false; }
+  };
+}
+
+function screenVerify(_, q) {
+  const email = q.email || '';
+  $app.innerHTML = `<div class="topbar"><a class="icon-btn" href="#/daftar" aria-label="Kembali">${ICON.back}</a><h1>Verifikasi email</h1></div>
+  <div class="page" style="gap:24px;padding-top:12px">
+    <div class="auth-head" style="padding:0">
+      <span style="width:72px;height:72px;border-radius:36px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;color:var(--accent)">${ICON.mail}</span>
+      <h1>Cek Gmail kamu</h1>
+      <p class="muted" style="line-height:1.6">Kode 6 angka sudah dikirim ke<br><b style="color:var(--text)">${esc(email)}</b></p>
+      <a href="#/daftar" class="small" style="font-weight:700;padding:6px 10px">Salah email? Ubah</a>
+    </div>
+    ${DEMO ? '<div class="banner">Mode demo: ketik 6 angka apa saja.</div>' : ''}
+    <div class="field"><span>Masukkan kode OTP</span>
+      <div class="otp" role="group" aria-label="Kode OTP 6 angka">
+        ${[1, 2, 3, 4, 5, 6].map((i) => `<input inputmode="numeric" maxlength="1" aria-label="Angka ke-${i}">`).join('')}
+      </div>
+      <span class="small muted" id="resendRow"></span>
+    </div>
+    <button class="btn btn-primary" id="verifyBtn">Verifikasi &amp; masuk</button>
+  </div>`;
+
+  const boxes = [...document.querySelectorAll('.otp input')];
+  boxes.forEach((b, i) => {
+    b.oninput = () => {
+      b.value = b.value.replace(/\D/g, '').slice(-1);
+      if (b.value && boxes[i + 1]) boxes[i + 1].focus();
+      if (boxes.every((x) => x.value)) submit();
+    };
+    b.onkeydown = (e) => { if (e.key === 'Backspace' && !b.value && boxes[i - 1]) boxes[i - 1].focus(); };
+    b.onpaste = (e) => {
+      const d = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 6);
+      if (!d) return;
+      e.preventDefault();
+      d.split('').forEach((ch, j) => { if (boxes[j]) boxes[j].value = ch; });
+      if (d.length === 6) submit();
+    };
+  });
+  boxes[0].focus();
+
+  let until = Date.now() + 45000;
+  const row = document.getElementById('resendRow');
+  const tick = () => {
+    const left = until - Date.now();
+    if (left > 0) row.innerHTML = `Tidak ada email? Cek folder Spam, atau kirim ulang dalam <b style="color:var(--text)">${mmss(left)}</b>`;
+    else row.innerHTML = 'Tidak ada email? Cek folder Spam, atau <a href="#" id="resend" style="font-weight:700">kirim ulang kode</a>';
+    const r = document.getElementById('resend');
+    if (r) r.onclick = async (e) => {
+      e.preventDefault();
+      try { await api('POST', '/auth/resend', { email }); toast('Kode baru sudah dikirim'); until = Date.now() + 45000; tick(); }
+      catch (err) { toast(err.message); }
+    };
+  };
+  tick(); every(1000, tick);
+
+  let busy = false;
+  async function submit() {
+    if (busy) return;
+    const code = boxes.map((b) => b.value).join('');
+    if (code.length !== 6) return toast('Masukkan 6 angka kode');
+    busy = true;
+    try {
+      const r = await api('POST', '/auth/verify', { email, code });
+      store.set('token', r.token); state.user = r.user;
+      toast('Akun berhasil dibuat');
+      go('#/beranda');
+    } catch (err) {
+      toast(err.message); busy = false;
+      boxes.forEach((b) => { b.value = ''; }); boxes[0].focus();
+    }
+  }
+  document.getElementById('verifyBtn').onclick = submit;
+}
+
+// Kembali dari login Google: Worker mengarahkan ke #/google?token=...
+function screenGoogle(_, q) {
+  if (q.token) { store.set('token', q.token); go('#/beranda'); }
+  else { toast(q.error || 'Login Google gagal'); go('#/masuk'); }
+}
+
+/* =========================================================
+   BAGIAN 7: BERANDA (pilih aplikasi) & PILIH NEGARA
+   ========================================================= */
+async function screenHome() {
+  $app.innerHTML = '<div class="empty" style="padding-top:80px">Memuat…</div>';
+  const [user] = await Promise.all([refreshMe(), loadCountries()]);
+  const c = currentCountry();
+  const { services } = await api('GET', '/services?country=' + encodeURIComponent(state.country));
+  services.sort((a, b) => (b.popular ? 1 : 0) - (a.popular ? 1 : 0) || a.name.localeCompare(b.name));
+
+  $app.innerHTML = `
+  <div class="row between" style="padding:18px 20px 10px">
+    <span class="brand">${brandHTML}</span>
+    <a class="icon-btn boxed" href="#/akun" aria-label="Akun">${ICON.user}</a>
+  </div>
+  <div class="page">
+    ${demoBanner()}
+    <section class="card">
+      <div><p class="small muted">Saldo kamu</p><p class="big">${rp(user.balance)}</p></div>
+      <div class="row">
+        <a class="btn btn-primary" href="#/deposit">${ICON.plus}Deposit</a>
+        <a class="btn btn-ghost" href="#/riwayat">Riwayat</a>
+      </div>
+    </section>
+    <div class="row">
+      <a class="chip-btn" href="#/negara"><img class="flag" src="${flagUrl(c.id)}" alt="">${esc(c.name)}${ICON.down}</a>
+      <label class="input-wrap grow">${ICON.search}<input class="input" id="q" placeholder="Cari aplikasi…" aria-label="Cari aplikasi"></label>
+    </div>
+    <div class="row between"><h2 class="title">Pilih aplikasi</h2><span class="small muted">Kode gagal = saldo kembali</span></div>
+    <ul class="list" id="list"></ul>
+  </div>`;
+
+  const draw = (term) => {
+    const t = (term || '').toLowerCase();
+    const rows = services.filter((s) => s.name.toLowerCase().includes(t));
+    document.getElementById('list').innerHTML = rows.length ? rows.map((s) => `
+      <li class="item">
+        ${appIcon(s)}
+        <div class="grow"><div style="font-weight:700">${esc(s.name)}</div>
+          <div class="small muted">${s.stock > 0 ? num(s.stock) + ' stok' : 'Stok habis'}</div></div>
+        <div class="price"><span class="small muted">mulai</span><b>${rp(s.minPrice)}</b></div>
+        ${s.stock > 0
+          ? `<a class="btn btn-primary btn-small" href="#/harga/${encodeURIComponent(s.id)}">Beli</a>`
+          : '<span class="pill off">Habis</span>'}
+      </li>`).join('') : '<li class="empty">Aplikasi tidak ditemukan</li>';
+  };
+  draw('');
+  document.getElementById('q').oninput = (e) => draw(e.target.value);
+}
+
+async function screenCountries() {
+  const list = await loadCountries();
+  $app.innerHTML = `<div class="topbar"><a class="icon-btn" href="#/beranda" aria-label="Kembali">${ICON.back}</a><h1>Pilih negara</h1></div>
+  <div class="page">
+    <label class="input-wrap">${ICON.search}<input class="input" id="q" placeholder="Cari negara…" aria-label="Cari negara"></label>
+    <p class="small muted">Semua negara dari penyedia · stok &amp; harga ikut otomatis</p>
+    <ul class="list" id="list"></ul>
+  </div>`;
+  const draw = (term) => {
+    const t = (term || '').toLowerCase();
+    const rows = list.filter((c) => c.name.toLowerCase().includes(t) || (c.code || '').includes(t))
+      .sort((a, b) => (b.popular ? 1 : 0) - (a.popular ? 1 : 0) || a.name.localeCompare(b.name));
+    document.getElementById('list').innerHTML = rows.map((c) => `
+      <li><button class="item click${c.id === state.country ? ' tier on' : ''}" data-id="${esc(c.id)}">
+        <img class="flag" src="${flagUrl(c.id)}" alt="">
+        <span class="small muted" style="width:38px;font-weight:700">${esc(c.code)}</span>
+        <span class="grow" style="font-weight:600">${esc(c.name)}</span>
+        ${c.id === state.country ? `<span style="color:var(--accent)">${ICON.check}</span>` : ''}
+      </button></li>`).join('') || '<li class="empty">Negara tidak ditemukan</li>';
+    document.querySelectorAll('#list button').forEach((b) => {
+      b.onclick = () => { state.country = b.dataset.id; store.set('country', state.country); go('#/beranda'); };
+    });
+  };
+  draw('');
+  document.getElementById('q').oninput = (e) => draw(e.target.value);
+}
+
+/* =========================================================
+   BAGIAN 8: PILIH HARGA & BELI
+   ========================================================= */
+async function screenPrices(serviceId) {
+  await loadCountries();
+  const c = currentCountry();
+  const [{ service, tiers }, user] = await Promise.all([
+    api('GET', '/prices?country=' + encodeURIComponent(state.country) + '&service=' + encodeURIComponent(serviceId)),
+    refreshMe(),
+  ]);
+  const avail = tiers.filter((t) => t.stock > 0).sort((a, b) => a.price - b.price);
+  let picked = 0;
+  const label = (i, n) => (i === 0 ? 'Hemat' : i === n - 1 ? 'Premium' : 'Standar');
+
+  $app.innerHTML = `<div class="topbar"><a class="icon-btn" href="#/beranda" aria-label="Kembali">${ICON.back}</a>
+    <div><h1>${esc(service.name)}</h1><div class="sub"><img class="flag" style="width:18px;height:12px" src="${flagUrl(c.id)}" alt="">${esc(c.code)} ${esc(c.name)}</div></div></div>
+  <div class="page">
+    <div class="row between"><h2 class="title">Pilih harga</h2><span class="small muted">Lebih mahal = lebih sering berhasil</span></div>
+    <ul class="list" id="tiers"></ul>
+    <div class="card" style="flex-direction:row;padding:12px 14px;gap:10px;border-radius:12px">
+      <span class="muted" style="flex-shrink:0">${ICON.info}</span>
+      <span class="small muted" style="line-height:1.5">Kode tidak masuk dalam 20 menit? Pesanan batal otomatis dan saldo kembali penuh.</span>
+    </div>
+    <div class="buybar">
+      <div><div class="small muted">Saldo ${rp(user.balance)}</div><div style="font-size:18px;font-weight:800" id="chosen"></div></div>
+      <button class="btn btn-primary grow" id="buy">Beli nomor</button>
+    </div>
+  </div>`;
+
+  const draw = () => {
+    document.getElementById('tiers').innerHTML = avail.length ? avail.map((t, i) => `
+      <li><button class="item click tier${i === picked ? ' on' : ''}" data-i="${i}">
+        <span class="dot"></span>
+        <span class="grow"><span style="display:block;font-weight:700">${label(i, avail.length)}</span>
+        <span class="small muted">${num(t.stock)} stok</span></span>
+        <b>${rp(t.price)}</b></button></li>`).join('') : '<li class="empty">Stok habis untuk negara ini. Coba negara lain.</li>';
+    document.querySelectorAll('#tiers button').forEach((b) => { b.onclick = () => { picked = +b.dataset.i; draw(); }; });
+    document.getElementById('chosen').textContent = avail.length ? rp(avail[picked].price) : '-';
+    document.getElementById('buy').disabled = !avail.length;
+  };
+  draw();
+
+  document.getElementById('buy').onclick = async (e) => {
+    const t = avail[picked];
+    if (user.balance < t.price) { toast('Saldo tidak cukup. Deposit dulu ya.'); return go('#/deposit'); }
+    e.target.disabled = true;
+    try {
+      const r = await api('POST', '/order', { country: state.country, service: service.id, price: t.price });
+      go('#/pesanan/' + encodeURIComponent(r.order.id));
+    } catch (err) { toast(err.message); e.target.disabled = false; }
+  };
+}
+
+
+/* =========================================================
+   BAGIAN 9: PESANAN AKTIF & RIWAYAT
+   ========================================================= */
+const STATUS = {
+  waiting: ['wait', 'Menunggu kode'],
+  received: ['ok', 'Kode masuk'],
+  done: ['ok', 'Selesai'],
+  canceled: ['bad', 'Dibatalkan'],
+  expired: ['bad', 'Waktu habis'],
+};
+function pill(st) { const s = STATUS[st] || ['off', st]; return `<span class="pill ${s[0]}">${s[1]}</span>`; }
+
+async function screenOrder(id) {
+  let o = (await api('GET', '/order/' + encodeURIComponent(id))).order;
+
+  const draw = () => {
+    const active = o.status === 'waiting' || o.status === 'received';
+    $app.innerHTML = `<div class="topbar"><a class="icon-btn" href="#/beranda" aria-label="Kembali">${ICON.back}</a><h1>Pesanan</h1></div>
+    <div class="page">
+      <section class="card">
+        <div class="row">${appIcon({ id: o.service, name: o.serviceName })}
+          <div class="grow"><div style="font-weight:700">${esc(o.serviceName)}</div>
+          <div class="small muted">${esc(o.countryName)} · ${rp(o.price)}</div></div>${pill(o.status)}</div>
+        <div class="field"><span>Nomor kamu</span>
+          <div class="numbox"><b>${esc(o.phone)}</b>
+          <button class="icon-btn boxed" style="border-radius:10px" data-copy="${esc(String(o.phone).replace(/\s/g, ''))}" aria-label="Salin nomor">${ICON.copy}</button></div></div>
+        <div class="field"><span>Kode OTP</span>
+          ${o.code
+            ? `<div class="codebox"><b>${esc(o.code)}</b><button class="btn btn-primary btn-small" data-copy="${esc(o.code)}">Salin</button></div>`
+            : o.status === 'waiting'
+              ? '<div class="codebox waiting"><b>Menunggu SMS masuk…</b><span class="spinner" style="margin-right:8px"></span></div>'
+              : '<div class="codebox waiting" style="background:#0E1626;border-color:var(--line)"><b style="color:var(--muted)">Tidak ada kode</b></div>'}
+        </div>
+      </section>
+      ${active ? `<section class="card" style="flex-direction:row;align-items:center;padding:14px 16px">
+        <span class="muted">${ICON.clock}</span>
+        <div class="grow"><div style="font-weight:600">Sisa waktu <span id="left">${mmss(o.expiresAt - Date.now())}</span></div>
+        <div class="small muted">Kode tidak masuk? Batalkan, saldo kembali otomatis.</div></div></section>` : ''}
+      ${o.status === 'waiting' ? `<div class="row"><button class="btn btn-danger" id="cancel">Batalkan</button><a class="btn btn-ghost" href="#/beranda">Beli lagi</a></div>` : ''}
+      ${o.status === 'received' ? `<button class="btn btn-primary" id="finish">Selesai</button>` : ''}
+      ${!active ? `<a class="btn btn-primary" href="#/beranda">Beli nomor lagi</a>` : ''}
+    </div>`;
+    document.querySelectorAll('[data-copy]').forEach((b) => { b.onclick = () => copy(b.dataset.copy); });
+    const cancel = document.getElementById('cancel');
+    if (cancel) cancel.onclick = async () => {
+      cancel.disabled = true;
+      try { o = (await api('POST', '/order/' + encodeURIComponent(o.id) + '/cancel')).order; toast('Dibatalkan. Saldo sudah kembali.'); draw(); }
+      catch (err) { toast(err.message); cancel.disabled = false; }
+    };
+    const finish = document.getElementById('finish');
+    if (finish) finish.onclick = async () => {
+      finish.disabled = true;
+      try { o = (await api('POST', '/order/' + encodeURIComponent(o.id) + '/finish')).order; toast('Pesanan selesai'); draw(); }
+      catch (err) { toast(err.message); finish.disabled = false; }
+    };
+  };
+  draw();
+
+  every(1000, () => {
+    const el = document.getElementById('left');
+    if (el) el.textContent = mmss(o.expiresAt - Date.now());
+  });
+  every(4000, async () => {
+    if (o.status !== 'waiting') return;
+    try {
+      const r = await api('GET', '/order/' + encodeURIComponent(o.id));
+      if (r.order.status !== o.status || r.order.code !== o.code) {
+        o = r.order; draw();
+        if (o.code) toast('Kode masuk!');
+      }
+    } catch (e) {}
+  });
+}
+
+async function screenHistory() {
+  const { orders } = await api('GET', '/orders');
+  $app.innerHTML = `<div class="topbar" style="padding-left:20px"><h1>Pesanan saya</h1></div>
+  <div class="page"><ul class="list">
+    ${orders.length ? orders.map((o) => `
+      <li><a class="item click" href="#/pesanan/${encodeURIComponent(o.id)}">
+        ${appIcon({ id: o.service, name: o.serviceName })}
+        <span class="grow"><span style="display:block;font-weight:700">${esc(o.serviceName)} · ${esc(o.countryName)}</span>
+        <span class="small muted">${esc(o.phone)} · ${rp(o.price)}</span></span>
+        ${pill(o.status)}</a></li>`).join('') : '<li class="empty">Belum ada pesanan. Yuk beli nomor pertama kamu.</li>'}
+  </ul></div>`;
+}
+
+/* =========================================================
+   BAGIAN 10: DEPOSIT
+   ========================================================= */
+async function screenDeposit() {
+  const user = await refreshMe();
+  let amount = CONFIG.AMOUNTS[0];
+  $app.innerHTML = `<div class="topbar" style="padding-left:20px"><h1>Deposit saldo</h1></div>
+  <div class="page">
+    ${demoBanner()}
+    <p class="muted">Saldo sekarang: <b style="color:var(--text)">${rp(user.balance)}</b></p>
+    <div class="field"><span>Pilih jumlah</span>
+      <div class="amounts">${CONFIG.AMOUNTS.map((a) => `<button data-a="${a}">${rp(a)}</button>`).join('')}</div></div>
+    <label class="field"><span>Atau isi sendiri (min. ${rp(CONFIG.MIN_DEPOSIT)})</span>
+      <input class="input" id="custom" inputmode="numeric" placeholder="Rp"></label>
+    <button class="btn btn-primary" id="make">Buat QRIS</button>
+    <div id="pay"></div>
+  </div>`;
+  const btns = [...document.querySelectorAll('.amounts button')];
+  const mark = () => btns.forEach((b) => b.classList.toggle('on', +b.dataset.a === amount));
+  btns.forEach((b) => { b.onclick = () => { amount = +b.dataset.a; document.getElementById('custom').value = ''; mark(); }; });
+  mark();
+  document.getElementById('custom').oninput = (e) => {
+    const v = +e.target.value.replace(/\D/g, '');
+    e.target.value = v ? num(v) : '';
+    amount = v; mark();
+  };
+  document.getElementById('make').onclick = async (e) => {
+    if (!amount || amount < CONFIG.MIN_DEPOSIT) return toast('Minimal deposit ' + rp(CONFIG.MIN_DEPOSIT));
+    e.target.disabled = true;
+    try {
+      const { deposit } = await api('POST', '/deposit', { amount });
+      showPayment(deposit);
+    } catch (err) { toast(err.message); }
+    e.target.disabled = false;
+  };
+}
+
+ function showPayment(d) {
+  const box = document.getElementById('pay');
+  const draw = () => {
+    const paid = d.status === 'paid';
+    const expired = d.status === 'expired' || (!paid && Date.now() > d.expiresAt);
+    box.innerHTML = `<section class="card" style="align-items:stretch">
+      <div class="row between"><b>Bayar pakai QRIS</b><span class="muted">${rp(d.amount)}</span></div>
+      ${paid ? `<div class="empty" style="color:#7CEBAE;font-weight:700">Pembayaran berhasil! Saldo sudah masuk.</div>
+        <a class="btn btn-primary" href="#/beranda">Beli nomor sekarang</a>` : `
+      <div class="qr">${d.qrImage ? `<img src="${esc(d.qrImage)}" alt="Kode QRIS">` : '<div class="ph">QRIS muncul di sini</div>'}</div>
+      ${d.paymentUrl ? `<a class="btn btn-ghost" href="${esc(d.paymentUrl)}" target="_blank" rel="noopener">Buka halaman bayar</a>` : ''}
+      <p class="small muted" style="text-align:center">Scan pakai DANA, OVO, GoPay, ShopeePay, atau m-banking. Saldo masuk otomatis setelah bayar.</p>
+      <div class="row" style="justify-content:center">
+        ${expired ? '<span class="pill bad">QRIS kedaluwarsa, buat baru</span>'
+          : `<span class="pill wait">Menunggu pembayaran · <span id="dleft">${mmss(d.expiresAt - Date.now())}</span></span>`}
+      </div>`}
+    </section>`;
+  };
+  draw();
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  stopTimers();
+  every(1000, () => { const el = document.getElementById('dleft'); if (el) el.textContent = mmss(d.expiresAt - Date.now()); });
+  every(5000, async () => {
+    if (d.status !== 'pending') return;
+    try {
+      const r = await api('GET', '/deposit/' + encodeURIComponent(d.id));
+      if (r.deposit.status !== d.status) { d = r.deposit; draw(); if (d.status === 'paid') toast('Saldo masuk ' + rp(d.amount)); }
+    } catch (e) {}
+  });
+}
+
+/* =========================================================
+   BAGIAN 11: AKUN & ADMIN
+   ========================================================= */
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+
+async function screenAccount() {
+  const u = await refreshMe();
+  $app.innerHTML = `<div class="topbar" style="padding-left:20px"><h1>Akun</h1></div>
+  <div class="page">
+    <section class="card">
+      <div class="row"><span class="app-ic" style="width:48px;height:48px;border-radius:24px">${esc((u.name || '?').charAt(0).toUpperCase())}</span>
+      <div class="grow"><div style="font-weight:700">${esc(u.name)}</div><div class="small muted">${esc(u.email)}</div></div></div>
+      <div class="row between"><span class="muted">Saldo</span><b>${rp(u.balance)}</b></div>
+    </section>
+    <a class="btn btn-ghost" href="#/riwayat">Riwayat pesanan</a>
+    <button class="btn btn-ghost" id="install">Pasang aplikasi di HP</button>
+    <a class="btn btn-ghost" href="${esc(CONFIG.ADMIN_TELEGRAM)}" target="_blank" rel="noopener">Hubungi admin</a>
+    ${u.role === 'admin' ? '<a class="btn btn-ghost" href="#/admin">Halaman admin</a>' : ''}
+    <button class="btn btn-danger" id="logout">Keluar</button>
+  </div>`;
+  document.getElementById('install').onclick = async () => {
+    if (installEvt) { installEvt.prompt(); installEvt = null; }
+    else toast('Buka menu browser (⋮) lalu pilih "Tambahkan ke Layar utama"');
+  };
+  document.getElementById('logout').onclick = () => { store.del('token'); state.user = null; go('#/masuk'); };
+}
+
+async function screenAdmin() {
+  const u = await refreshMe();
+  if (u.role !== 'admin') return go('#/beranda');
+  const s = await api('GET', '/admin/summary');
+  $app.innerHTML = `<div class="topbar"><a class="icon-btn" href="#/akun" aria-label="Kembali">${ICON.back}</a><h1>Admin</h1></div>
+  <div class="page">
+    <section class="card">
+      <span class="small muted">Saldo Grizzly (modal)</span>
+      <div class="row" style="align-items:baseline"><span class="big">$${Number(s.grizzlyBalanceUsd).toFixed(2)}</span>
+        <span class="muted small">≈ ${rp(s.grizzlyBalanceUsd * s.settings.kurs)}</span></div>
+      ${s.grizzlyBalanceUsd < 2 ? '<div class="banner">Saldo Grizzly hampir habis. Segera isi ulang.</div>' : ''}
+    </section>
+    <div class="amounts">
+      <div class="card" style="gap:4px"><span class="small muted">Terjual hari ini</span><b style="font-size:20px">${num(s.soldToday)}</b></div>
+      <div class="card" style="gap:4px"><span class="small muted">Untung hari ini</span><b style="font-size:20px">${rp(s.profitToday)}</b></div>
+    </div>
+    <form class="card" id="f">
+      <h2 class="title">Pengaturan harga</h2>
+      <label class="row between"><span>Untung per nomor (Rp)</span><input class="input" style="width:130px;text-align:right" name="profit" inputmode="numeric" value="${s.settings.profit}"></label>
+      <label class="row between"><span>Kurs $1 (Rp)</span><input class="input" style="width:130px;text-align:right" name="kurs" inputmode="numeric" value="${s.settings.kurs}"></label>
+      <label class="row between"><span>Bulatkan ke atas (Rp)</span><input class="input" style="width:130px;text-align:right" name="rounding" inputmode="numeric" value="${s.settings.rounding}"></label>
+      <p class="small muted" style="line-height:1.5">Harga jual = modal Grizzly × kurs + untung, dibulatkan ke atas. Berlaku untuk semua negara dan semua tingkat harga.</p>
+      <button class="btn btn-primary" type="submit">Simpan</button>
+    </form>
+  </div>`;
+  document.getElementById('f').onsubmit = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = { profit: +fd.get('profit') || 0, kurs: +fd.get('kurs') || 0, rounding: +fd.get('rounding') || 1 };
+    if (body.kurs < 1000) return toast('Kurs tidak masuk akal');
+    try { await api('POST', '/admin/settings', body); toast('Pengaturan disimpan'); }
+    catch (err) { toast(err.message); }
+  };
+}
+
+/* =========================================================
+   BAGIAN 12: MULAI
+   ========================================================= */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+}
+route();
+          
+                                                     
